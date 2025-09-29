@@ -1,0 +1,171 @@
+{
+  "directory": "/Users/jun/project",
+  "generated_at": "2025-09-29T11:10:19.614335+00:00",
+  "page": 1,
+  "page_count": 1,
+  "page_size": null,
+  "total_entries": 23,
+  "entries": [
+    {
+      "relative_path": "app-in-toss-nowalba",
+      "absolute_path": "/Users/jun/project/app-in-toss-nowalba",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-08-19T01:21:08.062306+00:00"
+    },
+    {
+      "relative_path": "app-in-toss-nowalba-rn/nowalba",
+      "absolute_path": "/Users/jun/project/app-in-toss-nowalba-rn/nowalba",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-09T05:04:48.866459+00:00"
+    },
+    {
+      "relative_path": "app-in-toss-nowalba-rn",
+      "absolute_path": "/Users/jun/project/app-in-toss-nowalba-rn",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-08T06:06:32.116898+00:00"
+    },
+    {
+      "relative_path": "claudia",
+      "absolute_path": "/Users/jun/project/claudia",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-16T00:58:06.239364+00:00"
+    },
+    {
+      "relative_path": "code-swifter",
+      "absolute_path": "/Users/jun/project/code-swifter",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-22T15:10:33.286432+00:00"
+    },
+    {
+      "relative_path": "director",
+      "absolute_path": "/Users/jun/project/director",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-09-09T16:33:42.949695+00:00"
+    },
+    {
+      "relative_path": "do-geun/do-geun",
+      "absolute_path": "/Users/jun/project/do-geun/do-geun",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-06-16T17:29:33.921230+00:00"
+    },
+    {
+      "relative_path": "do-geun",
+      "absolute_path": "/Users/jun/project/do-geun",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-06-16T17:17:07.550981+00:00"
+    },
+    {
+      "relative_path": "dong-converter/main.py",
+      "absolute_path": "/Users/jun/project/dong-converter/main.py",
+      "is_directory": false,
+      "size_bytes": 1788,
+      "modified_at": "2025-09-05T03:54:57.786161+00:00"
+    },
+    {
+      "relative_path": "dong-converter/법정동코드.json",
+      "absolute_path": "/Users/jun/project/dong-converter/법정동코드.json",
+      "is_directory": false,
+      "size_bytes": 5740376,
+      "modified_at": "2025-09-04T06:47:22.551121+00:00"
+    },
+    {
+      "relative_path": "dong-converter/법정동코드_filtered.json",
+      "absolute_path": "/Users/jun/project/dong-converter/법정동코드_filtered.json",
+      "is_directory": false,
+      "size_bytes": 2888749,
+      "modified_at": "2025-09-05T09:29:47.098119+00:00"
+    },
+    {
+      "relative_path": "dong-converter",
+      "absolute_path": "/Users/jun/project/dong-converter",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-09-04T06:49:24.378349+00:00"
+    },
+    {
+      "relative_path": "js-design-system",
+      "absolute_path": "/Users/jun/project/js-design-system",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-19T14:33:36.284459+00:00"
+    },
+    {
+      "relative_path": "nebula",
+      "absolute_path": "/Users/jun/project/nebula",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-09-23T12:40:50.968277+00:00"
+    },
+    {
+      "relative_path": "nebula-backend",
+      "absolute_path": "/Users/jun/project/nebula-backend",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-09-28T13:58:52.199951+00:00"
+    },
+    {
+      "relative_path": "now-alba",
+      "absolute_path": "/Users/jun/project/now-alba",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-06-26T05:36:34.544521+00:00"
+    },
+    {
+      "relative_path": "nowalba-web",
+      "absolute_path": "/Users/jun/project/nowalba-web",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-09-25T05:34:20.977805+00:00"
+    },
+    {
+      "relative_path": "react-webView/ReactWebViewDebugger",
+      "absolute_path": "/Users/jun/project/react-webView/ReactWebViewDebugger",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-25T02:40:41.996992+00:00"
+    },
+    {
+      "relative_path": "react-webView",
+      "absolute_path": "/Users/jun/project/react-webView",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-25T02:18:06.075905+00:00"
+    },
+    {
+      "relative_path": "SuperClaude",
+      "absolute_path": "/Users/jun/project/SuperClaude",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-27T14:32:59.079736+00:00"
+    },
+    {
+      "relative_path": "swift-OurSchool",
+      "absolute_path": "/Users/jun/project/swift-OurSchool",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-01T07:52:55.797639+00:00"
+    },
+    {
+      "relative_path": "test",
+      "absolute_path": "/Users/jun/project/test",
+      "is_directory": true,
+      "size_bytes": 0,
+      "modified_at": "2025-07-09T14:41:56.304336+00:00"
+    },
+    {
+      "relative_path": "README1.md",
+      "absolute_path": "/Users/jun/project/README1.md",
+      "is_directory": false,
+      "size_bytes": 1,
+      "modified_at": "2025-07-31T16:53:32.057450+00:00"
+    }
+  ]
+}
