@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
@@ -17,6 +17,34 @@ logger = logging.getLogger(__name__)
 
 _SNAPSHOT_ENV_VAR = "SNAPSHOT_DIR"
 _DEFAULT_SNAPSHOT_DIR = "snapshots"
+_AUTO_BATCH_SIZE = 50
+
+_DEVELOPMENT_DIRECTORY_MARKERS = {
+    ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    ".venv",
+    "node_modules",
+}
+
+_DEVELOPMENT_FILE_MARKERS = {
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "pyproject.toml",
+    "poetry.lock",
+    "Pipfile",
+    "Pipfile.lock",
+    "requirements.txt",
+    "setup.py",
+    "setup.cfg",
+    "Cargo.toml",
+    "go.mod",
+    "Gemfile",
+}
 
 
 @dataclass(frozen=True)
@@ -28,9 +56,10 @@ class SnapshotEntry:
     is_directory: bool
     size_bytes: int
     modified_at: datetime
+    is_development: bool = False
 
     @classmethod
-    def from_path(cls, root: Path, path: Path) -> "SnapshotEntry":
+    def from_path(cls, root: Path, path: Path, *, is_development: bool = False) -> "SnapshotEntry":
         try:
             stats = path.stat()
         except FileNotFoundError as exc:
@@ -45,6 +74,7 @@ class SnapshotEntry:
             is_directory=is_directory,
             size_bytes=0 if is_directory else stats.st_size,
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+            is_development=is_development,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -54,6 +84,7 @@ class SnapshotEntry:
             "is_directory": self.is_directory,
             "size_bytes": self.size_bytes,
             "modified_at": self.modified_at.isoformat(),
+            "is_development": self.is_development,
         }
 
 
@@ -75,6 +106,7 @@ class FolderSnapshotResult:
     total_entries: int
     page_size: Optional[int]
     pages: List[SnapshotPage]
+    development_directories: List[SnapshotEntry] = field(default_factory=list)
 
     @property
     def page_count(self) -> int:
@@ -90,7 +122,9 @@ def snapshot_directory(raw_path: str, page_size: Optional[int] = None) -> Folder
     logger.info('항목 수집 완료: path=%s, entries=%d', directory, len(entries))
     generated_at = datetime.now(timezone.utc)
 
-    chunks = _chunk_entries(entries, page_size)
+    effective_page_size = _determine_page_size(entries, page_size)
+
+    chunks = _chunk_entries(entries, effective_page_size)
     if not chunks:
         chunks = [entries]
 
@@ -113,7 +147,7 @@ def snapshot_directory(raw_path: str, page_size: Optional[int] = None) -> Folder
             total_entries=len(entries),
             page_index=index,
             page_count=len(chunks),
-            page_size=page_size,
+            page_size=effective_page_size,
             entries=chunk,
         )
         pages.append(SnapshotPage(page=index, path=output_path, entry_count=len(chunk)))
@@ -122,8 +156,9 @@ def snapshot_directory(raw_path: str, page_size: Optional[int] = None) -> Folder
         directory=str(directory),
         generated_at=generated_at,
         total_entries=len(entries),
-        page_size=page_size,
+        page_size=effective_page_size,
         pages=pages,
+        development_directories=[entry for entry in entries if entry.is_development],
     )
 
 
@@ -138,25 +173,63 @@ def _ensure_snapshot_root() -> Path:
 
 
 def _iter_snapshot_entries(root: Path) -> Iterable[SnapshotEntry]:
-    for current_dir, dirnames, filenames in os.walk(root):
-        current_path = Path(current_dir)
+    def walk(current: Path) -> Iterable[SnapshotEntry]:
+        try:
+            children = [child for child in current.iterdir() if not child.name.startswith(".")]
+        except PermissionError as exc:
+            raise DirectoryInspectionError("디렉터리에 접근 권한이 없습니다.") from exc
 
-        dirnames[:] = sorted(
-            [name for name in dirnames if not name.startswith(".")],
-            key=lambda name: name.lower(),
-        )
-        visible_files = sorted(
-            [name for name in filenames if not name.startswith(".")],
-            key=lambda name: name.lower(),
-        )
+        directories: list[Path] = []
+        files: list[Path] = []
 
-        for directory_name in dirnames:
-            directory_path = current_path / directory_name
+        for child in children:
+            if child.is_dir():
+                directories.append(child)
+            else:
+                files.append(child)
+
+        directories.sort(key=lambda path: path.name.lower())
+        files.sort(key=lambda path: path.name.lower())
+
+        for directory_path in directories:
+            is_development = _is_development_directory(directory_path)
+            if is_development:
+                yield SnapshotEntry.from_path(
+                    root,
+                    directory_path,
+                    is_development=True,
+                )
+                continue
+            # 가장 깊은 경로부터 순차적으로 처리하기 위해 먼저 하위 항목을 순회한다.
+            yield from walk(directory_path)
             yield SnapshotEntry.from_path(root, directory_path)
 
-        for file_name in visible_files:
-            file_path = current_path / file_name
+        for file_path in files:
             yield SnapshotEntry.from_path(root, file_path)
+
+    yield from walk(root)
+
+
+def _is_development_directory(path: Path) -> bool:
+    """Return True when directory appears to be a development project root."""
+
+    for marker in _DEVELOPMENT_DIRECTORY_MARKERS:
+        candidate = path / marker
+        try:
+            if candidate.exists():
+                return True
+        except OSError:
+            continue
+
+    for marker in _DEVELOPMENT_FILE_MARKERS:
+        candidate = path / marker
+        try:
+            if candidate.is_file():
+                return True
+        except OSError:
+            continue
+
+    return False
 
 
 def _chunk_entries(entries: list[SnapshotEntry], page_size: Optional[int]) -> list[list[SnapshotEntry]]:
@@ -167,6 +240,18 @@ def _chunk_entries(entries: list[SnapshotEntry], page_size: Optional[int]) -> li
     for start in range(0, len(entries), page_size):
         chunks.append(entries[start : start + page_size])
     return chunks
+
+
+def _determine_page_size(
+    entries: list[SnapshotEntry], page_size: Optional[int]
+) -> Optional[int]:
+    if page_size is not None and page_size > 0:
+        return page_size
+
+    if len(entries) >= _AUTO_BATCH_SIZE:
+        return _AUTO_BATCH_SIZE
+
+    return page_size
 
 
 def _build_snapshot_path(

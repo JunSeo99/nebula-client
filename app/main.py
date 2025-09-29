@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 
 from app.schemas.folder import (
+    DevelopmentDirectoryInfo,
     FolderContentsResponse,
     FolderSelectionRequest,
     FolderSnapshotRequest,
@@ -63,6 +64,13 @@ def snapshot_folder(payload: FolderSnapshotRequest) -> FolderSnapshotResponse:
                 entry_count=page.entry_count,
             )
             for page in result.pages
+        ],
+        development_directories=[
+            DevelopmentDirectoryInfo(
+                relative_path=entry.relative_path,
+                absolute_path=entry.absolute_path,
+            )
+            for entry in result.development_directories
         ],
     )
 

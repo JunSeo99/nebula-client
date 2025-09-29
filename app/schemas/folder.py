@@ -59,6 +59,19 @@ class SnapshotPageInfo(BaseModel):
     entry_count: int = Field(..., ge=0, description="Number of directory entries in this page.")
 
 
+class DevelopmentDirectoryInfo(BaseModel):
+    """Directory detected as a development workspace and not traversed."""
+
+    relative_path: str = Field(
+        ...,
+        description="Path to the directory relative to the snapshot root.",
+    )
+    absolute_path: str = Field(
+        ...,
+        description="Absolute filesystem path to the development directory.",
+    )
+
+
 class FolderSnapshotResponse(BaseModel):
     """Details about generated directory snapshots."""
 
@@ -72,4 +85,8 @@ class FolderSnapshotResponse(BaseModel):
     pages: list[SnapshotPageInfo] = Field(
         default_factory=list,
         description="Per-file metadata for the snapshot output.",
+    )
+    development_directories: list[DevelopmentDirectoryInfo] = Field(
+        default_factory=list,
+        description="Directories flagged as development workspaces during snapshot.",
     )
