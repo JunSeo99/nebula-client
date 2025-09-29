@@ -10,7 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+from app.extraction.handlers.pdf import PdfExtractionError, extract_pdf_keywords
 from app.services.folder_inspection import DirectoryInspectionError, resolve_directory
+from app.services.snapshot_delivery import send_snapshot_payload
 
 
 logger = logging.getLogger(__name__)
@@ -140,6 +142,16 @@ def snapshot_directory(raw_path: str, page_size: Optional[int] = None) -> Folder
             len(chunks),
             len(chunk),
         )
+        page_payload = _serialize_snapshot_page(
+            directory=directory,
+            generated_at=generated_at,
+            total_entries=len(entries),
+            page_index=index,
+            page_count=len(chunks),
+            page_size=effective_page_size,
+            entries=chunk,
+        )
+        send_snapshot_payload(page_payload)
         _write_snapshot_file(
             output_path=output_path,
             directory=directory,
@@ -294,3 +306,73 @@ def _write_snapshot_file(
             json.dump(payload, fp, ensure_ascii=False, indent=2)
     except OSError as exc:
         raise DirectoryInspectionError("스냅샷 파일을 저장할 수 없습니다.") from exc
+
+
+def _serialize_snapshot_page(
+    *,
+    directory: Path,
+    generated_at: datetime,
+    total_entries: int,
+    page_index: int,
+    page_count: int,
+    page_size: Optional[int],
+    entries: list[SnapshotEntry],
+) -> dict[str, object]:
+    """Convert a snapshot page into a camelCase payload for the remote server."""
+
+    pdf_keywords = _collect_pdf_keywords(entries)
+
+    return {
+        "directory": str(directory),
+        "generatedAt": generated_at.isoformat(),
+        "page": page_index,
+        "pageCount": page_count,
+        "pageSize": page_size,
+        "totalEntries": total_entries,
+        "entries": [
+            _serialize_snapshot_entry(entry, pdf_keywords.get(entry.absolute_path))
+            for entry in entries
+        ],
+    }
+
+
+def _serialize_snapshot_entry(
+    entry: SnapshotEntry, keywords: Optional[list[str]]
+) -> dict[str, object]:
+    payload = {
+        "relativePath": entry.relative_path,
+        "absolutePath": entry.absolute_path,
+        "isDirectory": entry.is_directory,
+        "sizeBytes": entry.size_bytes,
+        "modifiedAt": entry.modified_at.isoformat(),
+        "isDevelopment": entry.is_development,
+    }
+    if keywords:
+        payload["keywords"] = keywords
+    return payload
+
+
+def _collect_pdf_keywords(entries: list[SnapshotEntry]) -> dict[str, list[str]]:
+    """Return a mapping of absolute PDF paths to their extracted keywords."""
+
+    keywords: dict[str, list[str]] = {}
+    for entry in entries:
+        if entry.is_directory:
+            continue
+        if not entry.absolute_path.lower().endswith(".pdf"):
+            continue
+
+        try:
+            extracted = extract_pdf_keywords(entry.absolute_path)
+        except PdfExtractionError as exc:
+            logger.warning(
+                "PDF 키워드 추출 실패: path=%s, error=%s",
+                entry.absolute_path,
+                exc,
+            )
+            continue
+
+        if extracted:
+            keywords[entry.absolute_path] = extracted
+
+    return keywords

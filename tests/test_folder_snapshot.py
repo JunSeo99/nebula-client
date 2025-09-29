@@ -3,15 +3,34 @@
 import json
 from pathlib import Path
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 
 
+class _StubResponse:
+    status_code = 200
+
+
+@pytest.fixture
+def snapshot_delivery_calls(monkeypatch):
+    calls: list[dict[str, object]] = []
+    monkeypatch.setenv("SERVER_URL", "http://example.com")
+
+    def fake_post(url: str, json: dict, timeout: float):
+        calls.append({"url": url, "json": json, "timeout": timeout})
+        return _StubResponse()
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    return calls
+
+
 client = TestClient(app)
 
 
-def test_snapshot_creates_single_file(tmp_path, monkeypatch):
+def test_snapshot_creates_single_file(tmp_path, monkeypatch, snapshot_delivery_calls):
     target_dir = tmp_path / "source"
     target_dir.mkdir()
 
@@ -55,7 +74,7 @@ def test_snapshot_creates_single_file(tmp_path, monkeypatch):
     )
 
 
-def test_snapshot_honors_page_size(tmp_path, monkeypatch):
+def test_snapshot_honors_page_size(tmp_path, monkeypatch, snapshot_delivery_calls):
     target_dir = tmp_path / "source"
     target_dir.mkdir()
 
@@ -88,7 +107,7 @@ def test_snapshot_honors_page_size(tmp_path, monkeypatch):
         assert all(entry["is_development"] is False for entry in data["entries"])
 
 
-def test_snapshot_auto_batches_when_entries_large(tmp_path, monkeypatch):
+def test_snapshot_auto_batches_when_entries_large(tmp_path, monkeypatch, snapshot_delivery_calls):
     target_dir = tmp_path / "source"
     target_dir.mkdir()
 
@@ -119,7 +138,7 @@ def test_snapshot_auto_batches_when_entries_large(tmp_path, monkeypatch):
     assert all(entry["is_development"] is False for entry in data["entries"])
 
 
-def test_snapshot_respects_depth_first_order(tmp_path, monkeypatch):
+def test_snapshot_respects_depth_first_order(tmp_path, monkeypatch, snapshot_delivery_calls):
     target_dir = tmp_path / "source"
     target_dir.mkdir()
 
@@ -159,7 +178,7 @@ def test_snapshot_respects_depth_first_order(tmp_path, monkeypatch):
     ]
 
 
-def test_snapshot_skips_development_directories(tmp_path, monkeypatch):
+def test_snapshot_skips_development_directories(tmp_path, monkeypatch, snapshot_delivery_calls):
     target_dir = tmp_path / "source"
     target_dir.mkdir()
 
@@ -213,3 +232,77 @@ def test_snapshot_skips_development_directories(tmp_path, monkeypatch):
         entry["relative_path"] for entry in payload["development_directories"]
     }
     assert development_relative_paths == {"git_project", "python_project"}
+
+
+def test_snapshot_sends_camel_case_payload(tmp_path, monkeypatch, snapshot_delivery_calls):
+    target_dir = tmp_path / "source"
+    target_dir.mkdir()
+
+    (target_dir / "alpha_file.txt").write_text("alpha", encoding="utf-8")
+    (target_dir / "beta_file.txt").write_text("beta", encoding="utf-8")
+
+    snapshot_root = tmp_path / "snapshots"
+    monkeypatch.setenv("SNAPSHOT_DIR", str(snapshot_root))
+
+    response = client.post(
+        "/folders/snapshot",
+        json={"path": str(target_dir), "page_size": 5},
+    )
+
+    assert response.status_code == 200
+    assert len(snapshot_delivery_calls) == 1
+
+    call = snapshot_delivery_calls[0]
+    assert call["url"] == "http://example.com/generate-filename"
+    assert call["timeout"] == 10.0
+
+    payload = call["json"]
+    assert payload["directory"] == str(target_dir.resolve())
+    assert "generatedAt" in payload
+    assert payload["page"] == 1
+    assert payload["pageCount"] == 1
+    assert payload["pageSize"] == 5
+    assert payload["totalEntries"] == 2
+    assert len(payload["entries"]) == 2
+    assert all("relativePath" in entry for entry in payload["entries"])
+    assert all("absolutePath" in entry for entry in payload["entries"])
+    assert all("isDirectory" in entry for entry in payload["entries"])
+
+
+def test_snapshot_includes_pdf_keywords(tmp_path, monkeypatch, snapshot_delivery_calls):
+    target_dir = tmp_path / "source"
+    target_dir.mkdir()
+
+    pdf_path = target_dir / "report.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4 dummy")
+
+    (target_dir / "notes.txt").write_text("notes", encoding="utf-8")
+
+    snapshot_root = tmp_path / "snapshots"
+    monkeypatch.setenv("SNAPSHOT_DIR", str(snapshot_root))
+
+    keywords = ["Nebula", "Pipeline"]
+
+    def fake_extract(path: str, **_: object) -> list[str]:
+        assert path == str(pdf_path)
+        return keywords
+
+    monkeypatch.setattr(
+        "app.extraction.handlers.pdf.extract_pdf_keywords",
+        fake_extract,
+    )
+
+    response = client.post(
+        "/folders/snapshot",
+        json={"path": str(target_dir)},
+    )
+
+    assert response.status_code == 200
+    assert len(snapshot_delivery_calls) == 1
+
+    pdf_entry = next(
+        entry
+        for entry in snapshot_delivery_calls[0]["json"]["entries"]
+        if entry["relativePath"].endswith("report.pdf")
+    )
+    assert pdf_entry["keywords"] == keywords
