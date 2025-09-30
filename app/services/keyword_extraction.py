@@ -24,7 +24,7 @@ except Exception:
 # --- KeyBERT/Embedding 준비 (전역 캐시) ---
 _KEYBERT = None
 _SENT_EMBED = None
-_MODEL_NAME = "jhgan/ko-sroberta-multitask"
+_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 
 
 def _get_models():
@@ -62,6 +62,7 @@ def keybert_analyze(
         text,
         keyphrase_ngram_range=(1, 1),
         use_mmr=False,
+        diversity=0,
         top_n=top_n_keywords,
     )
 
@@ -75,7 +76,7 @@ def keybert_analyze(
         per_sent = kb.extract_keywords(
             sents,
             keyphrase_ngram_range=(5, 10),  # 긴 구절 위주
-            use_mmr=False,
+            use_mmr=True,
             top_n=1,
         )
         # per_sent는 [[(phrase, score)] , [(phrase, score)], ...] 형태

@@ -143,6 +143,7 @@ def snapshot_directory(raw_path: str, page_size: Optional[int] = None) -> Folder
             len(chunk),
         )
         page_payload = _serialize_snapshot_page(
+
             directory=directory,
             generated_at=generated_at,
             total_entries=len(entries),
@@ -329,6 +330,7 @@ def _serialize_snapshot_page(
         "pageCount": page_count,
         "pageSize": page_size,
         "totalEntries": total_entries,
+        "userId": '621c7d3957c2ea5b9063d04c',
         "entries": [
             _serialize_snapshot_entry(entry, pdf_keywords.get(entry.absolute_path))
             for entry in entries

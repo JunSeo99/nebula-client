@@ -22,9 +22,8 @@ def send_snapshot_payload(payload: Mapping[str, Any]) -> None:
         DirectoryInspectionError: When configuration is missing or the request fails.
     """
 
-    print(payload)
-    return
     base_url = os.getenv(_SERVER_URL_ENV)
+    base_url = "http://localhost:8080"
     if not base_url:
         raise DirectoryInspectionError("SERVER_URL 환경 변수가 설정되지 않았습니다.")
 
