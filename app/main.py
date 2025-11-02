@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, status
@@ -97,7 +98,7 @@ def _resolve_local_root() -> Path:
     return resolved
 
 
-def _resolve_target_path(path: str | None) -> str:
+def _resolve_target_path(path: Optional[str]) -> str:
     root = _resolve_local_root()
 
     if path is None or path.strip() == "":
@@ -121,7 +122,7 @@ def _resolve_target_path(path: str | None) -> str:
 
 
 @app.get("/local/folder", response_model=FolderContentsResponse)
-def get_local_folder(path: str | None = Query(None, description="조회할 로컬 디렉터리 경로.")) -> FolderContentsResponse:
+def get_local_folder(path: Optional[str] = Query(None, description="조회할 로컬 디렉터리 경로.")) -> FolderContentsResponse:
     try:
         target_path = _resolve_target_path(path)
         return inspect_directory(target_path)
@@ -140,4 +141,3 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "8000")),
         reload=True,
     )
-
