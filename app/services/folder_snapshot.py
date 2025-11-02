@@ -10,7 +10,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+from app.extraction.handlers.image import (
+    ImageExtractionError,
+    ImageHighlights,
+    extract_image_highlights,
+)
 from app.extraction.handlers.pdf import PdfExtractionError, extract_pdf_keywords
+from app.extraction.handlers.xls import (
+    SpreadsheetExtractionError,
+    build_summary_text,
+)
 from app.services.folder_inspection import DirectoryInspectionError, resolve_directory
 from app.services.snapshot_delivery import send_snapshot_payload
 
@@ -48,6 +57,16 @@ _DEVELOPMENT_FILE_MARKERS = {
     "Gemfile",
 }
 
+
+_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff")
+
+
+@dataclass(frozen=True)
+class FileInsights:
+    """Aggregated metadata used when prompting downstream GPT APIs."""
+
+    highlights: List[str]
+    caption: Optional[str] = None
 
 @dataclass(frozen=True)
 class SnapshotEntry:
@@ -321,7 +340,7 @@ def _serialize_snapshot_page(
 ) -> dict[str, object]:
     """Convert a snapshot page into a camelCase payload for the remote server."""
 
-    pdf_keywords = _collect_pdf_keywords(entries)
+    file_insights = _collect_file_insights(entries)
 
     return {
         "directory": str(directory),
@@ -332,14 +351,15 @@ def _serialize_snapshot_page(
         "totalEntries": total_entries,
         "userId": '621c7d3957c2ea5b9063d04c',
         "entries": [
-            _serialize_snapshot_entry(entry, pdf_keywords.get(entry.absolute_path))
+            _serialize_snapshot_entry(entry, file_insights.get(entry.absolute_path))
             for entry in entries
         ],
     }
 
 
 def _serialize_snapshot_entry(
-    entry: SnapshotEntry, keywords: Optional[list[str]]
+    entry: SnapshotEntry,
+    insights: Optional[FileInsights],
 ) -> dict[str, object]:
     payload = {
         "relativePath": entry.relative_path,
@@ -349,32 +369,101 @@ def _serialize_snapshot_entry(
         "modifiedAt": entry.modified_at.isoformat(),
         "isDevelopment": entry.is_development,
     }
-    if keywords:
-        payload["keywords"] = keywords
+    if insights:
+        if insights.highlights:
+            payload["keywords"] = insights.highlights
+        if insights.caption:
+            payload["caption"] = insights.caption
+
     return payload
 
 
-def _collect_pdf_keywords(entries: list[SnapshotEntry]) -> dict[str, list[str]]:
-    """Return a mapping of absolute PDF paths to their extracted keywords."""
+def _collect_file_insights(entries: list[SnapshotEntry]) -> dict[str, FileInsights]:
+    """Return a mapping of absolute paths to extracted highlights and prompts."""
 
-    keywords: dict[str, list[str]] = {}
+    insights: dict[str, FileInsights] = {}
     for entry in entries:
         if entry.is_directory:
             continue
-        if not entry.absolute_path.lower().endswith(".pdf"):
-            continue
+
+        absolute_path = entry.absolute_path
+        lower_path = absolute_path.lower()
 
         try:
-            extracted = extract_pdf_keywords(entry.absolute_path)
+            if lower_path.endswith(".pdf"):
+                highlights = extract_pdf_keywords(absolute_path)
+                if not highlights:
+                    continue
+                insights[absolute_path] = FileInsights(
+                    highlights=highlights,
+                    caption=None,
+                )
+            elif lower_path.endswith(_IMAGE_EXTENSIONS):
+                image_highlights = extract_image_highlights(absolute_path)
+                combined_lines = list(image_highlights.ocr_lines)
+
+                if image_highlights.caption:
+                    if image_highlights.caption not in combined_lines:
+                        combined_lines.append(image_highlights.caption)
+
+                if not combined_lines:
+                    continue
+                insights[absolute_path] = FileInsights(
+                    highlights=combined_lines,
+                    caption=image_highlights.caption,
+                )
+            elif lower_path.endswith((".xlsx", ".xls", ".xlsm", ".csv")):
+                summary_text, signals = build_summary_text(absolute_path)
+                summary_text = summary_text.strip()
+
+                candidate_highlights: list[str] = []
+                seen_highlights: set[str] = set()
+                for value in (
+                    signals.sections
+                    + signals.banner
+                    + signals.headers
+                    + signals.samples
+                ):
+                    cleaned = value.strip()
+                    if not cleaned:
+                        continue
+                    lowered = cleaned.lower()
+                    if lowered in seen_highlights:
+                        continue
+                    candidate_highlights.append(cleaned)
+                    seen_highlights.add(lowered)
+                    if len(candidate_highlights) >= 40:
+                        break
+
+                if not candidate_highlights and summary_text:
+                    candidate_highlights.append(summary_text)
+
+                if not candidate_highlights:
+                    continue
+
+                insights[absolute_path] = FileInsights(
+                    highlights=candidate_highlights,
+                    caption=summary_text or None,
+                )
+
+
         except PdfExtractionError as exc:
             logger.warning(
                 "PDF 키워드 추출 실패: path=%s, error=%s",
-                entry.absolute_path,
+                absolute_path,
                 exc,
             )
-            continue
+        except ImageExtractionError as exc:
+            logger.warning(
+                "이미지 하이라이트 추출 실패: path=%s, error=%s",
+                absolute_path,
+                exc,
+            )
+        except SpreadsheetExtractionError as exc:
+            logger.warning(
+                "스프레드시트 요약 생성 실패: path=%s, error=%s",
+                absolute_path,
+                exc,
+            )
 
-        if extracted:
-            keywords[entry.absolute_path] = extracted
-
-    return keywords
+    return insights

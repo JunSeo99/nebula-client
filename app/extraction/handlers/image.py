@@ -1,181 +1,134 @@
-# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121  # (CUDA 환경인 경우 예시)
-# pip install transformers pillow requests tqdm
-# 한글 번역까지 원하면:
+"""Image utilities combining OCR highlights and caption generation."""
 
-# git_caption.py
-# -*- coding: utf-8 -*-
-import argparse
-import os
-import io
-import glob
-import sys
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import List, Optional
 
-import torch
-from PIL import Image, UnidentifiedImageError
-from tqdm import tqdm
-
-import requests
-from transformers import (
-    AutoProcessor,
-    AutoModelForCausalLM,
-)
+from app.extraction.handlers.ocr import OcrExtractionError, extract_ocr_titles
 
 
-def load_image_from_path(path: str) -> Optional[Image.Image]:
+class ImageExtractionError(RuntimeError):
+    """Raised when image processing fails."""
+
+
+@dataclass(frozen=True)
+class ImageHighlights:
+    """Bundle OCR-derived lines and an optional caption for an image."""
+
+    ocr_lines: List[str]
+    caption: Optional[str] = None
+
+
+_CAPTION_PIPELINE: Optional[tuple[object, object, str]] = None
+
+
+def _load_image(path: str):
+    try:
+        from PIL import Image  # type: ignore
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ImageExtractionError("Pillow 라이브러리를 찾을 수 없습니다.") from exc
+
     try:
         return Image.open(path).convert("RGB")
-    except (FileNotFoundError, UnidentifiedImageError):
-        return None
+    except FileNotFoundError as exc:
+        raise ImageExtractionError("이미지 파일을 찾을 수 없습니다.") from exc
+    except Exception as exc:  # pragma: no cover - image specific error
+        raise ImageExtractionError("이미지 파일을 열지 못했습니다.") from exc
 
 
-def load_image_from_url(url: str, timeout: float = 20.0) -> Optional[Image.Image]:
+def _load_caption_pipeline(model_name: str = "microsoft/git-base"):
+    global _CAPTION_PIPELINE
+
+    if _CAPTION_PIPELINE is not None:
+        return _CAPTION_PIPELINE
+
     try:
-        r = requests.get(url, timeout=timeout)
-        r.raise_for_status()
-        return Image.open(io.BytesIO(r.content)).convert("RGB")
-    except Exception:
-        return None
+        import torch  # type: ignore
+        from transformers import AutoModelForCausalLM, AutoProcessor  # type: ignore
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise ImageExtractionError("이미지 캡셔닝을 위해 torch 및 transformers가 필요합니다.") from exc
 
-
-def init_git_model(model_name: str = "microsoft/git-base", dtype: str = "auto"):
-    """
-    dtype: "auto" | "fp16" | "fp32"  (fp16은 CUDA 필요)
-    """
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    if dtype == "fp16":
-        torch_dtype = torch.float16
-    elif dtype == "fp32":
-        torch_dtype = torch.float32
-    else:
-        # auto: GPU면 fp16, 아니면 float32
-        torch_dtype = torch.float16 if device == "cuda" else torch.float32
+    try:
+        processor = AutoProcessor.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+        model = model.to(device)
+        model.eval()
+    except Exception as exc:  # pragma: no cover - model load error
+        raise ImageExtractionError("이미지 캡셔닝 모델 로드에 실패했습니다.") from exc
 
-    processor = AutoProcessor.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch_dtype,
-    ).to(device)
-    model.eval()
-    return processor, model, device
+    _CAPTION_PIPELINE = (processor, model, device)
+    return _CAPTION_PIPELINE
 
 
-def generate_caption(
-        image: Image.Image,
-        processor,
-        model,
-        device: str,
-        max_length: int = 50,
-        num_beams: int = 3,
-        do_sample: bool = False,
-) -> str:
-    """
-    GIT 모델로 영어 캡션 생성
-    """
-    inputs = processor(images=image, return_tensors="pt").to(device)
-    with torch.no_grad():
-        output_ids = model.generate(
-            **inputs,
-            max_length=max_length,
-            num_beams=num_beams,
-            do_sample=do_sample,
-            early_stopping=True,
-        )
-    caption = processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-    return caption
-
-
-def list_images_in_dir(dir_path: str) -> List[str]:
-    patterns = ["*.jpg", "*.jpeg", "*.png", "*.webp", "*.bmp", "*.tiff"]
-    files = []
-    for p in patterns:
-        files.extend(glob.glob(os.path.join(dir_path, p)))
-    files.sort()
-    return files
-
-
-def run_single_image(
-        image: Image.Image,
-        processor,
-        model,
-        device: str,
-) -> str:
-    en = generate_caption(image, processor, model, device)
-    return en
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Image captioning with microsoft/git-base"
-    )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--path", type=str, help="Local image file path")
-    group.add_argument("--url", type=str, help="Image URL")
-    group.add_argument("--dir", type=str, help="Directory containing images")
-
-    parser.add_argument("--dtype", type=str, default="auto", choices=["auto", "fp16", "fp32"],
-                        help="Computation dtype (auto/fp16/fp32)")
-    parser.add_argument("--max-length", type=int, default=50, help="Max tokens for caption")
-    parser.add_argument("--num-beams", type=int, default=3, help="Beam search width")
-    parser.add_argument("--sample", action="store_true", help="Use sampling instead of pure beam search")
-    parser.add_argument("--model", type=str, default="microsoft/git-base", help="GIT model name")
-
-    args = parser.parse_args()
+def generate_image_caption(path: str, *, max_length: int = 64) -> Optional[str]:
+    """Generate a caption for an image file using a vision-language model."""
 
     try:
-        processor, model, device = init_git_model(args.model, args.dtype)
-    except Exception as e:
-        print(f"[ERR] Failed to load model ({args.model}): {e}", file=sys.stderr)
-        sys.exit(1)
+        image = _load_image(path)
+    except ImageExtractionError:
+        raise
 
-    if args.path:
-        img = load_image_from_path(args.path)
-        if img is None:
-            print(f"[ERR] Cannot open image: {args.path}", file=sys.stderr)
-            sys.exit(2)
-        en = generate_caption(img, processor, model, device,
-                              max_length=args.max_length,
-                              num_beams=args.num_beams,
-                              do_sample=args.sample)
-        print(f"[EN] {en}")
+    try:
+        import torch  # type: ignore
+    except ImportError:
+        raise ImageExtractionError("이미지 캡셔닝을 위해 torch가 필요합니다.")
 
-    elif args.url:
-        img = load_image_from_url(args.url)
-        if img is None:
-            print(f"[ERR] Cannot fetch image from URL: {args.url}", file=sys.stderr)
-            sys.exit(3)
-        en = generate_caption(img, processor, model, device,
-                              max_length=args.max_length,
-                              num_beams=args.num_beams,
-                              do_sample=args.sample)
-        print(f"[EN] {en}")
+    try:
+        processor, model, device = _load_caption_pipeline()
+    except ImageExtractionError:
+        raise
 
-    elif args.dir:
-        files = list_images_in_dir(args.dir)
-        if not files:
-            print(f"[ERR] No images found in: {args.dir}", file=sys.stderr)
-            sys.exit(4)
+    try:
+        inputs = processor(images=image, return_tensors="pt")  # type: ignore[call-arg]
+        inputs = {key: value.to(device) for key, value in inputs.items()}
+        with torch.no_grad():
+            output_ids = model.generate(  # type: ignore[attr-defined]
+                **inputs,
+                max_length=max_length,
+                num_beams=3,
+                do_sample=False,
+                early_stopping=True,
+            )
+    except Exception as exc:  # pragma: no cover - inference error
+        raise ImageExtractionError("이미지 캡션 생성 중 오류가 발생했습니다.") from exc
 
-        print(f"\n폴더: {args.dir}")
-        print("=" * 50)
+    try:
+        caption = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
+    except Exception as exc:  # pragma: no cover
+        raise ImageExtractionError("생성된 캡션을 해석하지 못했습니다.") from exc
 
-        for fp in tqdm(files, desc="Captioning"):
-            img = load_image_from_path(fp)
-            if img is None:
-                print(f"[SKIP] {fp} (unreadable)")
-                continue
-            en = generate_caption(img, processor, model, device,
-                                  max_length=args.max_length,
-                                  num_beams=args.num_beams,
-                                  do_sample=args.sample)
-
-            # 파일명만 추출 (경로 제거)
-            filename = fp.split('\\')[-1] if '\\' in fp else fp.split('/')[-1]
-            print(f"\n{filename}")
-            print(f"{en}")
-            print("-" * 30)
+    return caption.strip()
 
 
-if __name__ == "__main__":
-    main()
+def extract_image_highlights(path: str, *, size_ratio: float = 0.8) -> ImageHighlights:
+    """Return OCR-derived lines and an optional caption for the image."""
+
+    try:
+        ocr_lines = extract_ocr_titles(path, size_ratio=size_ratio)
+    except OcrExtractionError as exc:
+        raise ImageExtractionError("이미지에서 텍스트를 추출하지 못했습니다.") from exc
+
+    caption: Optional[str]
+    try:
+        caption = generate_image_caption(path)
+    except ImageExtractionError:
+        caption = None
+
+    normalized_caption: Optional[str] = None
+    if caption:
+        normalized_caption = " ".join(caption.split()).strip()
+        if not normalized_caption:
+            normalized_caption = None
+
+    return ImageHighlights(ocr_lines=ocr_lines, caption=normalized_caption)
+
+
+__all__ = [
+    "ImageExtractionError",
+    "ImageHighlights",
+    "extract_image_highlights",
+    "generate_image_caption",
+]

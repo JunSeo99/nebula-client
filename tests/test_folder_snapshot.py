@@ -306,3 +306,52 @@ def test_snapshot_includes_pdf_keywords(tmp_path, monkeypatch, snapshot_delivery
         if entry["relativePath"].endswith("report.pdf")
     )
     assert pdf_entry["keywords"] == keywords
+    assert "prompt" in pdf_entry
+    assert all(keyword in pdf_entry["prompt"] for keyword in keywords)
+    assert "caption" not in pdf_entry
+
+
+def test_snapshot_includes_image_highlights(tmp_path, monkeypatch, snapshot_delivery_calls):
+    target_dir = tmp_path / "source"
+    target_dir.mkdir()
+
+    image_path = target_dir / "diagram.png"
+    image_path.write_bytes(b"fake")
+
+    snapshot_root = tmp_path / "snapshots"
+    monkeypatch.setenv("SNAPSHOT_DIR", str(snapshot_root))
+
+    from app.extraction.handlers.image import ImageHighlights
+
+    image_lines = ["메인 제목", "보조 문장"]
+    caption = "A technical diagram of a rocket"
+
+    def fake_image_highlights(path: str, *, size_ratio: float = 0.8) -> ImageHighlights:
+        assert path == str(image_path)
+        assert size_ratio == 0.8
+        return ImageHighlights(ocr_lines=image_lines, caption=caption)
+
+    monkeypatch.setattr(
+        "app.extraction.handlers.image.extract_image_highlights",
+        fake_image_highlights,
+    )
+
+    response = client.post(
+        "/folders/snapshot",
+        json={"path": str(target_dir)},
+    )
+
+    assert response.status_code == 200
+    assert len(snapshot_delivery_calls) == 1
+
+    image_entry = next(
+        entry
+        for entry in snapshot_delivery_calls[0]["json"]["entries"]
+        if entry["relativePath"].endswith("diagram.png")
+    )
+
+    assert image_entry["keywords"] == image_lines + [caption]
+    assert image_entry["caption"] == caption
+    assert "prompt" in image_entry
+    assert "[OCR 상위 텍스트]" in image_entry["prompt"]
+    assert "[이미지 캡션]" in image_entry["prompt"]

@@ -24,6 +24,9 @@ def send_snapshot_payload(payload: Mapping[str, Any]) -> None:
 
     base_url = os.getenv(_SERVER_URL_ENV)
     base_url = "http://localhost:8080"
+
+
+    print("payload: ",payload)
     if not base_url:
         raise DirectoryInspectionError("SERVER_URL 환경 변수가 설정되지 않았습니다.")
 
