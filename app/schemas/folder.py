@@ -3,9 +3,25 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+
+class SortBy(str, Enum):
+    """Sorting criteria for folder entries."""
+
+    NAME = "name"
+    MODIFIED_AT = "modified_at"
+    FILE_TYPE = "file_type"
+
+
+class SortOrder(str, Enum):
+    """Sorting order."""
+
+    ASC = "asc"
+    DESC = "desc"
 
 
 class FolderSelectionRequest(BaseModel):
@@ -90,3 +106,31 @@ class FolderSnapshotResponse(BaseModel):
         default_factory=list,
         description="Directories flagged as development workspaces during snapshot.",
     )
+
+
+class StorageInfoResponse(BaseModel):
+    """Storage capacity information."""
+
+    total_bytes: int = Field(..., ge=0, description="Total storage capacity in bytes.")
+    used_bytes: int = Field(..., ge=0, description="Used storage in bytes.")
+    free_bytes: int = Field(..., ge=0, description="Free storage in bytes.")
+    total_gb: float = Field(..., ge=0, description="Total storage capacity in GB.")
+    used_gb: float = Field(..., ge=0, description="Used storage in GB.")
+    free_gb: float = Field(..., ge=0, description="Free storage in GB.")
+    used_percent: float = Field(
+        ..., ge=0, le=100, description="Percentage of storage used (0-100)."
+    )
+
+
+class FileOpenRequest(BaseModel):
+    """Request to open a file."""
+
+    path: str = Field(..., description="Absolute path to the file to open.")
+
+
+class FileOpenResponse(BaseModel):
+    """Response after opening a file."""
+
+    success: bool = Field(..., description="Whether the file was opened successfully.")
+    message: str = Field(..., description="Status message.")
+    path: str = Field(..., description="Absolute path of the opened file.")
