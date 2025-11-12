@@ -15,13 +15,14 @@ from app.extraction.handlers.image import (
     ImageHighlights,
     extract_image_highlights,
 )
-from app.extraction.handlers.pdf import PdfExtractionError, extract_pdf_keywords
+from app.extraction.handlers.pdf import PdfExtractionError, extract_pdf_keywords, extract_pdf_head_text
 from app.extraction.handlers.xls import (
     SpreadsheetExtractionError,
     build_summary_text,
 )
 from app.services.folder_inspection import DirectoryInspectionError, resolve_directory
 from app.services.snapshot_delivery import send_snapshot_payload
+from app.services.keyword_extraction import keybert_analyze
 
 
 logger = logging.getLogger(__name__)
@@ -391,9 +392,35 @@ def _collect_file_insights(entries: list[SnapshotEntry]) -> dict[str, FileInsigh
 
         try:
             if lower_path.endswith(".pdf"):
-                highlights = extract_pdf_keywords(absolute_path)
+                # PDF에서 텍스트 추출
+                pdf_text_lines = extract_pdf_head_text(absolute_path, n_pages=3)
+                if not pdf_text_lines:
+                    continue
+                
+                # 텍스트를 합쳐서 KeyBERT로 키워드 추출
+                combined_text = " ".join(pdf_text_lines)
+                if len(combined_text.strip()) < 10:  # 너무 짧으면 건너뛰기
+                    continue
+                
+                try:
+                    keywords, _ = keybert_analyze(combined_text, top_n_keywords=8)
+                    # KeyBERT 결과는 (키워드, 점수) 튜플이므로 키워드만 추출
+                    highlights = [kw[0] for kw in keywords if kw[0].strip()]
+                    
+                    # KeyBERT가 키워드를 찾지 못한 경우, 원본 텍스트 라인을 사용
+                    if not highlights:
+                        highlights = pdf_text_lines[:5]  # 최대 5개 라인
+                except Exception as kw_exc:
+                    logger.warning(
+                        "KeyBERT 키워드 추출 실패, 폴백 사용: path=%s, error=%s",
+                        absolute_path,
+                        kw_exc,
+                    )
+                    highlights = pdf_text_lines[:5]
+                
                 if not highlights:
                     continue
+                    
                 insights[absolute_path] = FileInsights(
                     highlights=highlights,
                     caption=None,
@@ -445,6 +472,32 @@ def _collect_file_insights(entries: list[SnapshotEntry]) -> dict[str, FileInsigh
                     highlights=candidate_highlights,
                     caption=summary_text or None,
                 )
+            else:
+                # 텍스트 파일 등 다른 파일 타입에 대해서도 키워드 추출 시도
+                try:
+                    # 텍스트 파일인 경우에만 처리
+                    text_extensions = (".txt", ".md", ".py", ".js", ".ts", ".java", ".cpp", ".c", ".h", ".hpp", ".json", ".xml", ".html", ".css")
+                    if lower_path.endswith(text_extensions):
+                        try:
+                            with open(absolute_path, "r", encoding="utf-8", errors="ignore") as f:
+                                content = f.read(50000)  # 최대 50KB만 읽기
+                                if len(content.strip()) >= 20:  # 최소 길이 체크
+                                    keywords, _ = keybert_analyze(content, top_n_keywords=5)
+                                    highlights = [kw[0] for kw in keywords if kw[0].strip()]
+                                    if highlights:
+                                        insights[absolute_path] = FileInsights(
+                                            highlights=highlights,
+                                            caption=None,
+                                        )
+                        except (UnicodeDecodeError, OSError):
+                            # 바이너리 파일이거나 읽을 수 없는 파일은 건너뛰기
+                            pass
+                except Exception as text_exc:
+                    logger.debug(
+                        "텍스트 파일 키워드 추출 실패: path=%s, error=%s",
+                        absolute_path,
+                        text_exc,
+                    )
 
 
         except PdfExtractionError as exc:
