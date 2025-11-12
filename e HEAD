@@ -1,0 +1,487 @@
+[1mdiff --git a/IMPLEMENTATION_CHECKLIST.md b/IMPLEMENTATION_CHECKLIST.md[m
+[1mnew file mode 100644[m
+[1mindex 0000000..6ba24e9[m
+[1m--- /dev/null[m
+[1m+++ b/IMPLEMENTATION_CHECKLIST.md[m
+[36m@@ -0,0 +1,353 @@[m
+[32m+[m[32m# Spring 연동 구현 체크리스트[m
+[32m+[m
+[32m+[m[32m## Phase 1: 기초 설정 (1주)[m
+[32m+[m
+[32m+[m[32m### 1.1 의존성 추가[m
+[32m+[m[32m- [ ] `httpx` (이미 설치됨) 확인[m
+[32m+[m[32m- [ ] `aio-pika` 설치 (RabbitMQ용, 옵션)[m
+[32m+[m[32m- [ ] `tenacity` 설치 (재시도 로직)[m
+[32m+[m[32m- [ ] `pydantic-settings` 설치 (환경 변수 관리)[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32mpip install tenacity pydantic-settings[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 1.2 파일 구조 생성[m
+[32m+[m[32m```[m
+[32m+[m[32mapp/[m
+[32m+[m[32m├── routers/[m
+[32m+[m[32m│   └── organization.py          # 새로 생성[m
+[32m+[m[32m├── schemas/[m
+[32m+[m[32m│   └── organization.py          # 새로 생성[m
+[32m+[m[32m├── services/[m
+[32m+[m[32m│   ├── spring_integration.py     # 새로 생성[m
+[32m+[m[32m│   └── ml_extraction.py          # 새로 생성[m
+[32m+[m[32m└── middleware/[m
+[32m+[m[32m    └── logging.py               # 새로 생성[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 1.3 환경 변수 설정[m
+[32m+[m[32m- [ ] `.env.example` 업데이트[m
+[32m+[m[32m- [ ] `.env` 파일에 Spring 서버 정보 입력[m
+[32m+[m[32m- [ ] API 키 생성 (Spring 서버에서)[m
+[32m+[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# .env.example에 추가[m
+[32m+[m[32mSPRING_SERVER_URL=http://localhost:8080[m
+[32m+[m[32mSPRING_API_KEY=your-secure-api-key[m
+[32m+[m[32mREDIS_URL=redis://localhost:6379[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Phase 2: Spring 연동 기본 (1주)[m
+[32m+[m
+[32m+[m[32m### 2.1 Schemas 구현[m
+[32m+[m[32m**파일**: `app/schemas/organization.py`[m
+[32m+[m
+[32m+[m[32m- [ ] `OrganizationStrategy` Enum 정의[m
+[32m+[m[32m- [ ] `FileEntry` 모델 정의[m
+[32m+[m[32m- [ ] `SnapshotBatchRequest` 모델 정의[m
+[32m+[m[32m- [ ] `SnapshotBatchResponse` 모델 정의[m
+[32m+[m[32m- [ ] `OrganizationRequest` 모델 정의[m
+[32m+[m
+[32m+[m[32m**테스트**:[m
+[32m+[m[32m```bash[m
+[32m+[m[32mpytest tests/test_schemas_organization.py -v[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 2.2 Spring 클라이언트 구현[m
+[32m+[m[32m**파일**: `app/services/spring_integration.py`[m
+[32m+[m
+[32m+[m[32m- [ ] `SpringIntegrationError` 예외 정의[m
+[32m+[m[32m- [ ] `SpringClient` 클래스 구현[m
+[32m+[m[32m  - [ ] `__init__` 메서드[m
+[32m+[m[32m  - [ ] `_build_headers` 메서드[m
+[32m+[m[32m  - [ ] `send_snapshot_batch` 메서드 (재시도 로직 포함)[m
+[32m+[m[32m  - [ ] `get_task_status` 메서드[m
+[32m+[m[32m  - [ ] `get_organization_result` 메서드[m
+[32m+[m[32m  - [ ] `report_execution_result` 메서드[m
+[32m+[m
+[32m+[m[32m**테스트**:[m
+[32m+[m[32m```bash[m
+[32m+[m[32mpytest tests/test_spring_integration.py -v[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 2.3 ML 추출 서비스 개선[m
+[32m+[m[32m**파일**: `app/services/ml_extraction.py` (새로 생성)[m
+[32m+[m
+[32m+[m[32m- [ ] 기존 추출 함수들을 통합[m
+[32m+[m[32m- [ ] 병렬 처리 지원 (asyncio)[m
+[32m+[m[32m- [ ] 에러 로깅 추가[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Phase 3: API 라우터 구현 (1주)[m
+[32m+[m
+[32m+[m[32m### 3.1 조직화 라우터 구현[m
+[32m+[m[32m**파일**: `app/routers/organization.py`[m
+[32m+[m
+[32m+[m[32m- [ ] `POST /api/organize` 엔드포인트[m
+[32m+[m[32m  - [ ] 경로 검증[m
+[32m+[m[32m  - [ ] 파일 수집[m
+[32m+[m[32m  - [ ] 메타데이터 추출[m
+[32m+[m[32m  - [ ] 배치 생성[m
+[32m+[m[32m  - [ ] Spring 전송 (백그라운드)[m
+[32m+[m
+[32m+[m[32m- [ ] `GET /api/organize/{task_id}` 엔드포인트[m
+[32m+[m[32m  - [ ] 로컬 상태 조회[m
+[32m+[m[32m  - [ ] Spring 상태 조회[m
+[32m+[m
+[32m+[m[32m- [ ] `POST /api/reorganize/execute` 엔드포인트[m
+[32m+[m[32m  - [ ] Spring 콜백 처리[m
+[32m+[m[32m  - [ ] 파일 이동 실행[m
+[32m+[m[32m  - [ ] 에러 처리[m
+[32m+[m
+[32m+[m[32m**테스트**:[m
+[32m+[m[32m```bash[m
+[32m+[m[32mpytest tests/test_routers_organization.py -v[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 3.2 main.py 업데이트[m
+[32m+[m[32m- [ ] 라우터 등록[m
+[32m+[m[32m- [ ] 미들웨어 추가[m
+[32m+[m[32m- [ ] 의존성 주입 설정[m
+[32m+[m
+[32m+[m[32m### 3.3 헬퍼 함수 구현[m
+[32m+[m[32m- [ ] `_collect_and_extract_files`[m
+[32m+[m[32m- [ ] `_get_file_type`[m
+[32m+[m[32m- [ ] `_chunk_files`[m
+[32m+[m[32m- [ ] `_get_batch_size`[m
+[32m+[m[32m- [ ] `_send_batches_to_spring`[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Phase 4: 고급 기능 (2주)[m
+[32m+[m
+[32m+[m[32m### 4.1 비동기 백그라운드 작업[m
+[32m+[m[32m- [ ] Celery + Redis 설정[m
+[32m+[m[32m- [ ] 작업 큐 구현[m
+[32m+[m[32m- [ ] 진행 상황 추적[m
+[32m+[m
+[32m+[m[32m**파일**: `app/tasks/extraction.py` (새로 생성)[m
+[32m+[m
+[32m+[m[32m```python[m
+[32m+[m[32mfrom celery import Celery[m
+[32m+[m
+[32m+[m[32mcelery_app = Celery('nebula')[m
+[32m+[m
+[32m+[m[32m@celery_app.task[m
+[32m+[m[32mdef extract_file_insights(file_path: str):[m
+[32m+[m[32m    # ML 추출 로직[m
+[32m+[m[32m    pass[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 4.2 메시지 큐 통합 (선택사항)[m
+[32m+[m[32m**파일**: `app/services/message_queue.py`[m
+[32m+[m
+[32m+[m[32m- [ ] `MessagePublisher` 추상 클래스[m
+[32m+[m[32m- [ ] `RabbitMQPublisher` 구현[m
+[32m+[m[32m- [ ] 이벤트 발행[m
+[32m+[m
+[32m+[m[32m### 4.3 비용 관리 시스템[m
+[32m+[m[32m**파일**: `app/services/cost_manager.py` (새로 생성)[m
+[32m+[m
+[32m+[m[32m- [ ] OpenAI API 비용 계산[m
+[32m+[m[32m- [ ] 예산 제한 체크[m
+[32m+[m[32m- [ ] 비용 로깅[m
+[32m+[m
+[32m+[m[32m### 4.4 재시도 정책[m
+[32m+[m[32m**파일**: `app/services/retry_policy.py` (새로 생성)[m
+[32m+[m
+[32m+[m[32m- [ ] 지수 백오프 구현[m
+[32m+[m[32m- [ ] 최대 재시도 횟수 설정[m
+[32m+[m[32m- [ ] 타임아웃 처리[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Phase 5: 테스트 (1주)[m
+[32m+[m
+[32m+[m[32m### 5.1 단위 테스트[m
+[32m+[m[32m- [ ] `tests/test_schemas_organization.py`[m
+[32m+[m[32m  - [ ] FileEntry 검증[m
+[32m+[m[32m  - [ ] SnapshotBatchRequest 검증[m
+[32m+[m
+[32m+[m[32m- [ ] `tests/test_spring_integration.py`[m
+[32m+[m[32m  - [ ] 성공 케이스[m
+[32m+[m[32m  - [ ] 네트워크 에러[m
+[32m+[m[32m  - [ ] 재시도 로직[m
+[32m+[m[32m  - [ ] 타임아웃[m
+[32m+[m
+[32m+[m[32m- [ ] `tests/test_routers_organization.py`[m
+[32m+[m[32m  - [ ] POST /api/organize 성공[m
+[32m+[m[32m  - [ ] GET /api/organize/{task_id}[m
+[32m+[m[32m  - [ ] 경로 검증 실패[m
+[32m+[m[32m  - [ ] 파일 수집 실패[m
+[32m+[m
+[32m+[m[32m### 5.2 통합 테스트[m
+[32m+[m[32m- [ ] Spring 서버 Mock 생성[m
+[32m+[m[32m- [ ] 엔드-투-엔드 시나리오[m
+[32m+[m[32m- [ ] 배치 전송 흐름[m
+[32m+[m[32m- [ ] 상태 조회 흐름[m
+[32m+[m
+[32m+[m[32m### 5.3 성능 테스트[m
+[32m+[m[32m- [ ] 1000개 파일 처리[m
+[32m+[m[32m- [ ] 동시 요청 처리[m
+[32m+[m[32m- [ ] 메모리 사용량 확인[m
+[32m+[m[32m- [ ] 배치 전송 시간[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Phase 6: 배포 준비 (1주)[m
+[32m+[m
+[32m+[m[32m### 6.1 로깅 및 모니터링[m
+[32m+[m[32m- [ ] Structured logging 구현[m
+[32m+[m[32m- [ ] 요청/응답 로깅[m
+[32m+[m[32m- [ ] 에러 추적 (Sentry 통합, 선택사항)[m
+[32m+[m
+[32m+[m[32m**파일**: `app/middleware/logging.py`[m
+[32m+[m
+[32m+[m[32m### 6.2 문서화[m
+[32m+[m[32m- [ ] API 문서 확인 (FastAPI Swagger)[m
+[32m+[m[32m- [ ] README.md 업데이트[m
+[32m+[m[32m- [ ] 환경 변수 문서화[m
+[32m+[m[32m- [ ] 트러블슈팅 가이드 작성[m
+[32m+[m
+[32m+[m[32m### 6.3 보안 점검[m
+[32m+[m[32m- [ ] API 키 검증[m
+[32m+[m[32m- [ ] 경로 검증[m
+[32m+[m[32m- [ ] 파일 접근 제어[m
+[32m+[m[32m- [ ] HTTPS 설정 (프로덕션)[m
+[32m+[m
+[32m+[m[32m### 6.4 Docker 설정[m
+[32m+[m[32m- [ ] `Dockerfile` 작성[m
+[32m+[m[32m- [ ] `docker-compose.yml` 작성[m
+[32m+[m[32m- [ ] 환경 변수 주입[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## Phase 7: 프로덕션 배포 (1주)[m
+[32m+[m
+[32m+[m[32m### 7.1 환경 변수 검증[m
+[32m+[m[32m- [ ] Spring 서버 URL 확인[m
+[32m+[m[32m- [ ] API 키 안전 저장[m
+[32m+[m[32m- [ ] 데이터베이스 연결 확인[m
+[32m+[m
+[32m+[m[32m### 7.2 헬스 체크[m
+[32m+[m[32m- [ ] Spring 서버 연결 테스트[m
+[32m+[m[32m- [ ] 데이터베이스 연결 테스트[m
+[32m+[m[32m- [ ] Redis 연결 테스트 (사용시)[m
+[32m+[m
+[32m+[m[32m```python[m
+[32m+[m[32m@app.get("/health/spring")[m
+[32m+[m[32masync def health_spring(spring_client: SpringClient = Depends(get_spring_client)):[m
+[32m+[m[32m    try:[m
+[32m+[m[32m        await spring_client.get_task_status("test")[m
+[32m+[m[32m        return {"status": "ok"}[m
+[32m+[m[32m    except:[m
+[32m+[m[32m        return {"status": "error"}, 503[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 7.3 롤백 계획[m
+[32m+[m[32m- [ ] 버전 관리 전략[m
+[32m+[m[32m- [ ] 데이터베이스 마이그레이션 계획[m
+[32m+[m[32m- [ ] 롤백 스크립트 작성[m
+[32m+[m
+[32m+[m[32m### 7.4 모니터링[m
+[32m+[m[32m- [ ] 로그 수집 (ELK, Datadog 등)[m
+[32m+[m[32m- [ ] 메트릭 수집 (Prometheus)[m
+[32m+[m[32m- [ ] 알림 설정[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 구현 중 체크사항[m
+[32m+[m
+[32m+[m[32m### 코드 품질[m
+[32m+[m[32m```bash[m
+[32m+[m[32m# 린트 체크[m
+[32m+[m[32mflake8 app/[m
+[32m+[m
+[32m+[m[32m# 타입 체크[m
+[32m+[m[32mmypy app/[m
+[32m+[m
+[32m+[m[32m# 테스트 커버리지[m
+[32m+[m[32mpytest --cov=app tests/[m
+[32m+[m
+[32m+[m[32m# 코드 포매팅[m
+[32m+[m[32mblack app/[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### Git 커밋 메시지 가이드[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32mfeat: Spring 연동 기본 스키마 정의[m
+[32m+[m
+[32m+[m[32m- FileEntry, OrganizationStrategy 스키마 추가[m
+[32m+[m[32m- SnapshotBatchRequest/Response 모델 정의[m
+[32m+[m
+[32m+[m[32mRefs #123[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### Pull Request 체크리스트[m
+[32m+[m[32m- [ ] 테스트 작성[m
+[32m+[m[32m- [ ] 문서 업데이트[m
+[32m+[m[32m- [ ] 코드 리뷰 요청[m
+[32m+[m[32m- [ ] CI 통과 확인[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 예상 일정[m
+[32m+[m
+[32m+[m[32m| Phase | 기간 | 주요 산출물 |[m
+[32m+[m[32m|-------|------|----------|[m
+[32m+[m[32m| 1 | 1주 | 프로젝트 구조, 환경 설정 |[m
+[32m+[m[32m| 2 | 1주 | Spring 클라이언트, 스키마 |[m
+[32m+[m[32m| 3 | 1주 | API 라우터, 배치 전송 |[m
+[32m+[m[32m| 4 | 2주 | Celery 통합, 비용 관리 |[m
+[32m+[m[32m| 5 | 1주 | 테스트 커버리지 >80% |[m
+[32m+[m[32m| 6 | 1주 | 문서, 보안, Docker |[m
+[32m+[m[32m| 7 | 1주 | 프로덕션 배포, 모니터링 |[m
+[32m+[m[32m| **합계** | **8주** | **프로덕션 준비 완료** |[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 위험 요소 및 대응[m
+[32m+[m
+[32m+[m[32m| 위험 | 영향 | 대응 방안 |[m
+[32m+[m[32m|------|------|----------|[m
+[32m+[m[32m| Spring 서버 다운 | 높음 | RabbitMQ를 통한 메시지 큐 분리 |[m
+[32m+[m[32m| OpenAI API 비용 초과 | 높음 | 배치 크기 동적 조정, 예산 제한 |[m
+[32m+[m[32m| 네트워크 지연 | 중간 | 재시도 로직, 타임아웃 설정 |[m
+[32m+[m[32m| 대용량 파일 처리 | 중간 | 스트리밍, 페이지네이션 |[m
+[32m+[m[32m| 권한 문제 | 낮음 | 에러 처리, 사용자 피드백 |[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 자주 묻는 질문[m
+[32m+[m
+[32m+[m[32m### Q: Spring 서버가 없으면?[m
+[32m+[m[32mA: Mock SpringClient를 만들어서 테스트할 수 있습니다.[m
+[32m+[m
+[32m+[m[32m### Q: 파일이 50개 이상이면?[m
+[32m+[m[32mA: 배치로 나눠서 순차 전송합니다. 병렬 처리는 추후 최적화.[m
+[32m+[m
+[32m+[m[32m### Q: 실패하면 어떻게?[m
+[32m+[m[32mA: 재시도 로직이 자동으로 처리합니다. 3회 실패시 로그에 기록됩니다.[m
+[32m+[m
+[32m+[m[32m### Q: 비용 관리는?[m
+[32m+[m[32mA: `max_cost_budget`으로 제한하고, 초과하면 요청을 거절합니다.[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 참고 자료[m
+[32m+[m
+[32m+[m[32m- [FastAPI 공식 문서](https://fastapi.tiangolo.com/)[m
+[32m+[m[32m- [Pydantic 문서](https://docs.pydantic.dev/)[m
+[32m+[m[32m- [httpx 문서](https://www.python-httpx.org/)[m
+[32m+[m[32m- [Tenacity 문서](https://tenacity.readthedocs.io/)[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m**작성자**: Claude Code[m
+[32m+[m[32m**최종 수정**: 2025-11-11[m
+[32m+[m[32m**버전**: 1.0[m
+[1mdiff --git a/INTEGRATION_SPRING.md b/INTEGRATION_SPRING.md[m
+[1mnew file mode 100644[m
+[1mindex 0000000..8a311e1[m
+[1m--- /dev/null[m
+[1m+++ b/INTEGRATION_SPRING.md[m
+[36m@@ -0,0 +1,1379 @@[m
+[32m+[m[32m# Spring 서버 연동 가이드[m
+[32m+[m
+[32m+[m[32m## 목차[m
+[32m+[m[32m1. [개요](#개요)[m
+[32m+[m[32m2. [시스템 아키텍처](#시스템-아키텍처)[m
+[32m+[m[32m3. [데이터 흐름](#데이터-흐름)[m
+[32m+[m[32m4. [FastAPI → Spring API 명세](#fastapi--spring-api-명세)[m
+[32m+[m[32m5. [구현 예제](#구현-예제)[m
+[32m+[m[32m6. [메시지 큐 통합](#메시지-큐-통합)[m
+[32m+[m[32m7. [에러 처리](#에러-처리)[m
+[32m+[m[32m8. [배포 및 운영](#배포-및-운영)[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 개요[m
+[32m+[m
+[32m+[m[32mNebula Client의 FastAPI 서버는 **로컬 파일 수집 및 ML 기반 메타데이터 추출**을 담당하고,[m
+[32m+[m[32m**Spring 메타데이터 서버**에 이를 전달하여 중앙 집중식으로 관리합니다.[m
+[32m+[m
+[32m+[m[32m### 역할 분담[m
+[32m+[m[32m```[m
+[32m+[m[32m┌─────────────────────────────────────────────────────────┐[m
+[32m+[m[32m│  FastAPI (Local Client)                                  │[m
+[32m+[m[32m│  ├─ 파일 시스템 접근                                      │[m
+[32m+[m[32m│  ├─ 로컬 ML 추출 (PDF, 이미지, 스프레드시트)              │[m
+[32m+[m[32m│  └─ 메타데이터 수집 (배치 단위)                           │[m
+[32m+[m[32m└────────────┬────────────────────────────────────────────┘[m
+[32m+[m[32m             │ (메타데이터 + 키워드)[m
+[32m+[m[32m             ▼[m
+[32m+[m[32m┌──────────────────────────────────────────────────────────┐[m
+[32m+[m[32m│  Spring Metadata Server (Central)                         │[m
+[32m+[m[32m│  ├─ 메타데이터 DB 저장                                    │[m
+[32m+[m[32m│  ├─ 배치 조율 및 상태 관리                                │[m
+[32m+[m[32m│  ├─ OpenAI API 호출 조정                                  │[m
+[32m+[m[32m│  └─ 최종 폴더 구조 결정                                   │[m
+[32m+[m[32m└──────────────────────────────────────────────────────────┘[m
+[32m+[m[32m             │ (재정리 명령)[m
+[32m+[m[32m             ▼[m
+[32m+[m[32m┌──────────────────────────────────────────────────────────┐[m
+[32m+[m[32m│  FastAPI (재정리 실행)                                    │[m
+[32m+[m[32m│  ├─ 폴더 생성                                             │[m
+[32m+[m[32m│  ├─ 파일 이동 (또는 심링크)                               │[m
+[32m+[m[32m│  └─ 완료 보고                                             │[m
+[32m+[m[32m└──────────────────────────────────────────────────────────┘[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 시스템 아키텍처[m
+[32m+[m
+[32m+[m[32m### FastAPI 에서 Spring 으로 전달하는 데이터 구조[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32m사용자 폴더 선택[m
+[32m+[m[32m    ↓[m
+[32m+[m[32m파일 수집 (배치 50개)[m
+[32m+[m[32m    ↓[m
+[32m+[m[32mML 추출 (병렬 처리)[m
+[32m+[m[32m    ├─ PDF: extract_pdf_keywords()[m
+[32m+[m[32m    ├─ 이미지: extract_image_highlights()[m
+[32m+[m[32m    └─ 스프레드시트: build_summary_text()[m
+[32m+[m[32m    ↓[m
+[32m+[m[32m메타데이터 + 키워드 생성[m
+[32m+[m[32m    ↓[m
+[32m+[m[32mSpring 서버로 전송[m
+[32m+[m[32m    ├─ Method: POST /api/snapshots/batch[m
+[32m+[m[32m    ├─ Payload: {directory, files[], keywords[], ...}[m
+[32m+[m[32m    └─ Response: {taskId, batchNumber, ...}[m
+[32m+[m[32m    ↓[m
+[32m+[m[32mSpring이 OpenAI 호출[m
+[32m+[m[32m    ├─ 배치 1-N: 초안 생성[m
+[32m+[m[32m    └─ 재귀: 점진적 개선[m
+[32m+[m[32m    ↓[m
+[32m+[m[32m파일 재정리 결과 반환[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m---[m
+[32m+[m
+[32m+[m[32m## 데이터 흐름[m
+[32m+[m
+[32m+[m[32m### 1. 클라이언트 요청 (Next.js → FastAPI)[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32mPOST /folders/organize[m
+[32m+[m[32mContent-Type: application/json[m
+[32m+[m
+[32m+[m[32m{[m
+[32m+[m[32m  "path": "/Users/jun/Documents/MyProject",[m
+[32m+[m[32m  "strategy": "BALANCED",[m
+[32m+[m[32m  "max_cost_budget": 50.0[m
+[32m+[m[32m}[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 2. FastAPI 백그라운드 처리[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32m1. 경로 검증[m
+[32m+[m[32m2. 파일 수집 (재귀적)[m
+[32m+[m[32m3. 50개 단위로 배치 생성[m
+[32m+[m[32m4. 각 파일에 대해:[m
+[32m+[m[32m   - 메타데이터 추출 (크기, 수정일, 타입)[m
+[32m+[m[32m   - ML 기반 키워드 추출[m
+[32m+[m[32m5. Spring 서버로 배치 전송 (HTTP POST)[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 3. Spring 처리[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32m1. 메타데이터 DB 저장[m
+[32m+[m[32m2. 배치 번호 추적[m
+[32m+[m[32m3. 모든 배치 수집 완료 시:[m
+[32m+[m[32m   - OpenAI API 호출 (배치 1)[m
+[32m+[m[32m   - 초안 생성[m
+[32m+[m[32m4. 재귀적 개선 (최대 3회)[m
+[32m+[m[32m5. 최종 폴더 구조 결정[m
+[32m+[m[32m6. FastAPI로 재정리 명령 전송[m
+[32m+[m[32m```[m
+[32m+[m
+[32m+[m[32m### 4. FastAPI 재정리 실행[m
+[32m+[m
+[32m+[m[32m```[m
+[32m+[m[32m1. 전달받은 구조 대로 폴�
