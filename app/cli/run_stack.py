@@ -132,7 +132,7 @@ def main() -> None:
     wait_for_http(f"http://{DEFAULT_NEXT_HOST}:{DEFAULT_NEXT_PORT}")
     print("Next.js is ready.")
 
-    window_url = f"http://{DEFAULT_NEXT_HOST}:{DEFAULT_NEXT_PORT}"
+    window_url = f"http://{DEFAULT_NEXT_HOST}:{DEFAULT_NEXT_PORT}/file-manager"
 
     try:
         if webview is not None:

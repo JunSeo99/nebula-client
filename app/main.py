@@ -26,6 +26,7 @@ from app.schemas.folder import (
 )
 from app.services.folder_inspection import DirectoryInspectionError, inspect_directory
 from app.services.folder_snapshot import snapshot_directory
+from app.routers import organized_files
 
 
 load_dotenv()
@@ -37,6 +38,9 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="Nebula Client API")
+
+# 라우터 등록
+app.include_router(organized_files.router)
 
 logger.info("=" * 80)
 logger.info("Nebula Client API 시작됨")
