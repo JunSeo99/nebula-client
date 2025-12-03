@@ -8,6 +8,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,15 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="Nebula Client API")
+
+# CORS 미들웨어 설정 - 모든 오리진, 메서드, 헤더 허용
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 라우터 등록
 app.include_router(organized_files.router)

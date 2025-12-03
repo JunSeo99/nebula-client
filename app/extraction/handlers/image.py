@@ -106,10 +106,10 @@ def generate_image_caption(path: str, *, max_length: int = 64) -> Optional[str]:
 def extract_image_highlights(path: str, *, size_ratio: float = 0.8) -> ImageHighlights:
     """Return OCR-derived lines and an optional caption for the image."""
 
-    try:
-        ocr_lines = extract_ocr_titles(path, size_ratio=size_ratio)
-    except OcrExtractionError as exc:
-        raise ImageExtractionError("이미지에서 텍스트를 추출하지 못했습니다.") from exc
+    # try:
+    #     ocr_lines = extract_ocr_titles(path, size_ratio=size_ratio)
+    # except OcrExtractionError as exc:
+    #     raise ImageExtractionError("이미지에서 텍스트를 추출하지 못했습니다.") from exc
 
     caption: Optional[str]
     try:
@@ -123,7 +123,7 @@ def extract_image_highlights(path: str, *, size_ratio: float = 0.8) -> ImageHigh
         if not normalized_caption:
             normalized_caption = None
 
-    return ImageHighlights(ocr_lines=ocr_lines, caption=normalized_caption)
+    return ImageHighlights(ocr_lines=[], caption=normalized_caption)
 
 
 __all__ = [

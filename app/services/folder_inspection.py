@@ -133,7 +133,13 @@ async def _extract_file_keywords(file_path: Path) -> List[str]:
             from app.extraction.handlers.image import extract_image_highlights
             try:
                 highlights = extract_image_highlights(str(file_path))
-                keywords = highlights.ocr_lines[:5]  # 상위 5개
+                # caption은 문자열이므로 리스트로 감싸기
+                if highlights.caption:
+                    keywords = [highlights.caption]
+                elif highlights.ocr_lines:
+                    keywords = highlights.ocr_lines[:5]  # 상위 5개
+                else:
+                    keywords = []
             except Exception as exc:
                 logger.warning(f"이미지 키워드 추출 실패: {file_path}: {exc}")
 
